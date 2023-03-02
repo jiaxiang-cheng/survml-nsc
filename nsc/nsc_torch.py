@@ -115,12 +115,15 @@ class NeuralSurvivalClusterTorch(nn.Module):
         self.optimizer = optimizer
 
         self.profile = create_representation(inputdim, layers + [self.k], act, self.dropout)
+        # this one is create the MLP to infer the weightage of each cluster's distribution
+
         self.latent = nn.ParameterList(
             [
                 nn.Parameter(torch.randn((1, self.representation)))
                 for _ in range(self.k)
             ]
         )
+
         self.outcome = nn.ModuleList(
             [
                 create_representation_positive(1 + self.representation, layers_surv + [risks], act_surv, self.dropout)
@@ -128,6 +131,9 @@ class NeuralSurvivalClusterTorch(nn.Module):
             ]
         )
         # create_representation_positive(inputdim, layers, activation, dropout=0)
+        # inputs are number of latent cluster representation + the time/horizon
+        # outputs will be the cumulative hazard, and the number of outputs corresponding to number of risks
+
         self.competing = create_representation(inputdim, layers + [risks], act, self.dropout)
         self.soft = nn.Softmax(dim=1)
 
@@ -140,18 +146,39 @@ class NeuralSurvivalClusterTorch(nn.Module):
         if self.k == 1:
             alphas = torch.ones((len(x), self.k), requires_grad=True).float().to(x.device)
         else:
-            alphas = self.profile(x)
+            alphas = self.profile(x)  # the weightage of each cluster distribution
 
         # Compute intensity and cumulative function
         cumulative, intensity = [], []
         for latent, outcome_competing in zip(self.latent, self.outcome):
+            # latent is the latent cluster representation of the k-th cluster
+            # outcome_competing is the neural network for the k-th cluster
+
+            # for each feature we need a set of representations
             latent = latent.repeat(len(x), 1)
+
             tau_outcome = horizon.clone().detach().requires_grad_(gradient)  # Copy with independent gradient
+
+            # inputs into the neural network is the latent cluster representations + the time/horizon t
             outcome = outcome_competing(torch.cat((latent, tau_outcome.unsqueeze(1)), 1))
+            # so the outcome will be the cumulative hazard function
+
+            # and the outcome has to subtract the value when t is 0
+            # "Finally, the additional constraint of being null at time t = 0 for the cumulative hazard must be
+            # enforced. Therefore, the neural network value at the origin time is subtracted from each component.
+            # This ensures that each component returns the well defined Λk."
             outcome = outcome - outcome_competing(torch.cat((latent, torch.zeros_like(tau_outcome.unsqueeze(1))), 1))
+
+            # betas are the weightages for different risks,
+            # and generated with another neural network followed by a softmax layer
             outcome = betas * outcome
+            # so this outcome will be the final cumulative hazard function
+
             cumulative.append(outcome.unsqueeze(-1))
+
             if gradient:
+                # this is to get the intensity function from the cumulative hazard function
+                # the integral of intensity is the cumulative hazard function
                 int = []
                 for r in range(self.risks):
                     int.append(grad(outcome[:, r].sum(), tau_outcome, create_graph=True)[0].unsqueeze(1))
@@ -164,6 +191,9 @@ class NeuralSurvivalClusterTorch(nn.Module):
         return cumulative, intensity, alphas
 
     def predict(self, x, horizon):
+        # the inputs are the features and time/horizon
         cumulative, _, alphas = self.forward(x, horizon)
         alphas = nn.Softmax(dim=1)(alphas).unsqueeze(1).repeat(1, self.risks, 1)  # Repeat alpha for each risk
+
+        # An individual survival function is then a weighted sum of these neural distributions
         return torch.sum(alphas * torch.exp(-cumulative), dim=2), alphas, torch.exp(-cumulative)

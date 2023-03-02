@@ -40,12 +40,12 @@ class NeuralSurvivalCluster(DSMBase):
         Parameters
         ----------
         x: np.ndarray
-            A numpy array of the input features, \( x \).
+            A numpy array of the input features, x.
         t: np.ndarray
-            A numpy array of the event/censoring times, \( t \).
+            A numpy array of the event/censoring times, t.
         e: np.ndarray
-            A numpy array of the event/censoring indicators, \( \delta \).
-            \( \delta = 1 \) means the event took place.
+            A numpy array of the event/censoring indicators, delta.
+            delta = 1 means the event took place.
         vsize: float
             Amount of data to set aside as the validation set.
         val_data: tuple

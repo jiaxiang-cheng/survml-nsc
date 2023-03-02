@@ -20,11 +20,11 @@ def get_optimizer(models, lr, optimizer, **kwargs):
         raise NotImplementedError('Optimizer ' + optimizer + ' is not implemented')
 
 
-def train_nsc(model,
-              x_train, t_train, e_train,
-              x_valid, t_valid, e_valid,
-              n_iter=1000, lr=1e-3, weight_decay=0.001,
-              bs=100, cuda=False):
+def train_nsc(model, x_train, t_train, e_train, x_valid, t_valid, e_valid,
+              n_iter=1000, lr=1e-3, weight_decay=0.001, bs=100, cuda=False):
+    """
+    train Neural Survival Cluster model with the given data
+    """
     # Separate oprimizer as one might need more time to converge
     optimizer = get_optimizer(model, lr, model.optimizer, weight_decay=weight_decay)
     patience, best_loss, previous_loss = 0, np.inf, np.inf
@@ -48,11 +48,7 @@ def train_nsc(model,
                 xb, tb, eb = xb.cuda(), tb.cuda(), eb.cuda()
 
             optimizer.zero_grad()
-            loss = total_loss(model,
-                              xb,
-                              tb,
-                              eb,
-                              model.weight_balance)
+            loss = total_loss(model, xb, tb, eb, model.weight_balance)
             loss.backward()
             optimizer.step()
 
@@ -60,10 +56,7 @@ def train_nsc(model,
         xb, tb, eb = x_valid, t_valid, e_valid
         if cuda:
             xb, tb, eb = xb.cuda(), tb.cuda(), eb.cuda()
-        valid_loss = total_loss(model,
-                                xb,
-                                tb,
-                                eb).item()
+        valid_loss = total_loss(model, xb, tb, eb).item()
         t_bar.set_description("Loss: {:.3f}".format(valid_loss))
         if valid_loss < previous_loss:
             patience = 0

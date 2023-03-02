@@ -16,8 +16,8 @@ def total_loss(model, x, t, e, weight_balance=1., eps=1e-10):
     # Sum over the different mixture and then across patient
     error = - weight_balance * torch.logsumexp(cum[e == 0], dim=1).sum()
 
-    for k in range(model.risks):
-        i = intensity[e == (k + 1)][:, k]
-        error -= torch.logsumexp(cum[e == (k + 1)] + torch.log(i), dim=1).sum()
+    for r in range(model.risks):
+        i = intensity[e == (r + 1)][:, r]
+        error -= torch.logsumexp(cum[e == (r + 1)] + torch.log(i), dim=1).sum()
 
     return error / len(x)
